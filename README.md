@@ -1,6 +1,6 @@
 # SlaveVM Monitoring System *under construction*
 ## Project Description
-### The SlaveVM Monitoring System is a comprehensive suite of Python scripts designed for effective monitoring and management of virtual machines (VMs). This robust and flexible platform handles various aspects of VM operation, including creation, configuration, backup, and reporting.
+The SlaveVM Monitoring System is a comprehensive suite of Python scripts designed for effective monitoring and management of virtual machines (VMs). This robust and flexible platform handles various aspects of VM operation, including creation, configuration, backup, and reporting.
 
 ## Key Features
 1. Virtual Machine Management: Scripts like create.py for VM creation, setup, and lifecycle management.
