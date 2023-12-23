@@ -5,9 +5,8 @@ import sys
 def provide_pass():
     try:
         root = tk.Tk()
-        root.withdraw()  # Hide the root window
+        root.withdraw()
 
-        # Create the password dialog
         password = simpledialog.askstring("Password", "Enter your sudo password:", show='*')
 
         root.destroy()

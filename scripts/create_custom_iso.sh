@@ -1,11 +1,9 @@
 #!/bin/bash
 
-# Function to check if a command is available
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to install genisoimage if it's not installed
 install_genisoimage() {
     if ! command_exists genisoimage; then
         echo "genisoimage is not installed. Installing it..."
@@ -14,7 +12,6 @@ install_genisoimage() {
     fi
 }
 
-# Function to download and extract isolinux.bin
 download_and_extract_isolinux() {
     local syslinux_archive="syslinux-6.03.tar.gz"
     local syslinux_extracted_dir="syslinux-6.03"
@@ -37,41 +34,51 @@ download_and_extract_isolinux() {
     fi
 }
 
-# Define your input and output file paths
-ubuntu_iso="./ubuntu-22.04.3-desktop-amd64.iso"
+clean_up() {
+    echo "Cleaning up..."
+
+    sudo rm -r "$tmp_dir"
+
+    sudo umount "$mnt_dir"
+    sudo rmdir "$mnt_dir"
+
+    local syslinux_archive="syslinux-6.03.tar.gz"
+    local syslinux_extracted_dir="syslinux-6.03"
+    sudo rm -f "$syslinux_archive"
+    sudo rm -rf "$syslinux_extracted_dir"
+
+    echo "Cleanup complete."
+}
+
+ubuntu_iso="../ubuntu-22.04.3-desktop-amd64.iso"
 output_dir="./custom_iso"
 output_iso="$output_dir/custom_ubuntu.iso"
 
-# Path to your preseed.cfg file
-preseed_file="./preseed.cfg"
+preseed_file="../config/preseed.cfg"
 
-# Check if the input Ubuntu ISO file exists
 if [ ! -f "$ubuntu_iso" ]; then
     echo "Error: Ubuntu ISO file not found at: $ubuntu_iso"
     exit 1
 fi
 
-# Check if the preseed.cfg file exists
 if [ ! -f "$preseed_file" ]; then
     echo "Error: preseed.cfg file not found at: $preseed_file"
     exit 1
 fi
 
-# Create the output directory if it doesn't exist
 if [ ! -d "$output_dir" ]; then
     mkdir -p "$output_dir"
+    chmod 777 "$output_dir"
     echo "Created output directory: $output_dir"
 else
     echo "Output directory already exists: $output_dir"
 fi
 
-# Check if the custom ISO file already exists
 if [ -f "$output_iso" ]; then
     echo "Custom ISO '$output_iso' already exists. Exiting script."
     exit 0
 fi
 
-# Create a directory to mount the original ISO
 mnt_dir="/mnt/original_iso"
 if [ ! -d "$mnt_dir" ]; then
     sudo mkdir -p "$mnt_dir"
@@ -80,34 +87,28 @@ else
     echo "Mount directory already exists: $mnt_dir"
 fi
 
-# Mount the original ISO to the directory
 sudo mount -o loop "$ubuntu_iso" "$mnt_dir"
 
-# Create a temporary directory to work in
 tmp_dir=$(mktemp -d)
 echo "Creating temporary working directory in $tmp_dir"
 
-# Extract the contents of the original ISO to the temporary directory using 7z
 echo "Extracting contents of the original ISO..."
 7z x "$ubuntu_iso" -o"$tmp_dir"
 
-# Copy the preseed.cfg file to the temporary directory
 cp "$preseed_file" "$tmp_dir/preseed.cfg"
 
-# Install genisoimage if not already installed
 install_genisoimage
 
-# Call the function to download and extract isolinux.bin
 download_and_extract_isolinux
 
-# Create the custom ISO using genisoimage
 echo "Creating custom ISO..."
 mkisofs -o "$output_iso" -b "isolinux.bin" -c "boot.cat" -no-emul-boot -input-charset utf-8 -boot-load-size 4 -boot-info-table -J -R -V "Custom Ubuntu" "$tmp_dir" > /dev/null 2>&1
 
-echo "Custom ISO '$output_iso' has been created in $output_dir."
-
-# Clean up temporary directory and unmount the original ISO
-echo "Cleaning up..."
-rm -r "$tmp_dir"
-sudo umount "$mnt_dir"
-rmdir "$mnt_dir"
+if [ $? -eq 0 ]; then
+    echo "Custom ISO '$output_iso' has been created in $output_dir."
+    clean_up
+else
+    echo "Failed to create custom ISO."
+    clean_up
+    exit 1
+fi

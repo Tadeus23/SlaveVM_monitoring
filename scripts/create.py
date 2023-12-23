@@ -1,5 +1,4 @@
 import subprocess
-import getpass
 import shlex
 import os
 from request_pass_gui import provide_pass
@@ -7,23 +6,18 @@ from request_pass_gui import provide_pass
 
 def create_custom_iso():
     try:
-        # Specify the path to your custom ISO creation script
         custom_iso_script_path = "./create_custom_iso.sh"
 
-        # Check if the custom ISO file already exists
         custom_iso_file = "custom_ubuntu.iso"
         if os.path.exists(custom_iso_file):
             print(f"Create.py: Custom ISO '{custom_iso_file}' already exists.")
             return
 
-        # Prompt the user for the sudo password
         sudo_password = provide_pass()
 
-        # Construct the command with sudo
         cmd = f"sudo -S {custom_iso_script_path}"
         cmd_args = shlex.split(cmd)
 
-        # Run the command, providing the sudo password as input
         subprocess.run(cmd_args, input=sudo_password, check=True, text=True)
 
         print("Create.py: Custom ISO creation script executed successfully.")
@@ -32,14 +26,11 @@ def create_custom_iso():
 
 
 def create_sub_vm():
-    # Specify the path to your shell scripts
     create_script_path = "./create_sub_vm.sh"
 
     sub_vm_name = "SubVM"
-    # Run the custom ISO creation script
     create_custom_iso()
 
-    # Run the shell script to create the sub-VM
     # try:
     #     cmd = f"{create_script_path} {sub_vm_name}"
     #     subprocess.run(shlex.split(cmd), check=True)

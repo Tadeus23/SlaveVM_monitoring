@@ -1,16 +1,13 @@
 #!/bin/bash
 
-# Check if the user provided the VM name as an argument
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <VMName>"
     exit 1
 fi
 
-# Define the VM name and path to the custom ISO
 vm_name="$1"
-custom_iso_file="./custom_ubuntu.iso"  # Replace with the path to your custom ISO
+custom_iso_file="./custom_ubuntu.iso"
 
-# Function to check if a file exists
 file_exists() {
     if [ ! -f "$1" ]; then
         echo "File '$1' not found. Please provide a valid path."
@@ -18,7 +15,6 @@ file_exists() {
     fi
 }
 
-# Check if the custom ISO file exists
 file_exists "$custom_iso_file"
 
 if VBoxManage showvminfo "$vm_name" >/dev/null 2>&1; then
@@ -40,5 +36,4 @@ else
     VBoxManage modifyvm "$vm_name" --nic1 "nat"
 fi
 
-# Start the VM
 VBoxManage startvm "$vm_name" --type headless
