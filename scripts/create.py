@@ -2,13 +2,14 @@ import subprocess
 import shlex
 import os
 from request_pass_gui import provide_pass
+import time
 
 
 def create_custom_iso():
     try:
         custom_iso_script_path = "./create_custom_iso.sh"
 
-        custom_iso_file = "custom_ubuntu.iso"
+        custom_iso_file = "../custom_iso/custom_ubuntu.iso"
         if os.path.exists(custom_iso_file):
             print(f"Create.py: Custom ISO '{custom_iso_file}' already exists.")
             return
@@ -31,27 +32,27 @@ def create_sub_vm():
     sub_vm_name = "SubVM"
     create_custom_iso()
 
-    # try:
-    #     cmd = f"{create_script_path} {sub_vm_name}"
-    #     subprocess.run(shlex.split(cmd), check=True)
-    #     print("Sub-VM creation script executed successfully.")
-    #
-    #     while True:
-    #         vm_info = subprocess.run(
-    #             ["VBoxManage", "showvminfo", sub_vm_name],
-    #             stdout=subprocess.PIPE,
-    #             stderr=subprocess.PIPE,
-    #             text=True,
-    #         )
-    #
-    #         if "State: running" in vm_info.stdout:
-    #             print("Sub-VM is now running.")
-    #             break
-    #
-    #         time.sleep(5)  # Wait for 5 seconds before checking again
-    #
-    # except subprocess.CalledProcessError as e:
-    #     print(f"Error during sub-VM creation: {e}")
+    try:
+        cmd = f"{create_script_path} {sub_vm_name}"
+        subprocess.run(shlex.split(cmd), check=True)
+        print("Sub-VM creation script executed successfully.")
+
+        while True:
+            vm_info = subprocess.run(
+                ["VBoxManage", "showvminfo", sub_vm_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            if "State: running" in vm_info.stdout:
+                print("Sub-VM is now running.")
+                break
+
+            time.sleep(5)  # Wait for 5 seconds before checking again
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error during sub-VM creation: {e}")
 
 
 if __name__ == "__main__":

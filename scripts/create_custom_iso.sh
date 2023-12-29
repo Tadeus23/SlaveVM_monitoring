@@ -1,114 +1,163 @@
 #!/bin/bash
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
+set -e  # Exit on error
 
-install_genisoimage() {
-    if ! command_exists genisoimage; then
-        echo "genisoimage is not installed. Installing it..."
-        sudo apt update -y
-        sudo apt install genisoimage -y
-    fi
-}
 
 download_and_extract_isolinux() {
     local syslinux_archive="syslinux-6.03.tar.gz"
     local syslinux_extracted_dir="syslinux-6.03"
+    local isolinux_dest_dir="$EXTRACT_DIR/isolinux"
+
+    mkdir -p "$isolinux_dest_dir"
 
     if [ -f "$syslinux_extracted_dir/bios/core/isolinux.bin" ]; then
         echo "Using existing isolinux.bin from $syslinux_extracted_dir"
-        cp "$syslinux_extracted_dir/bios/core/isolinux.bin" "$tmp_dir/"
     elif [ -f "$syslinux_archive" ]; then
         echo "Syslinux archive found locally. Extracting..."
         tar -xzf "$syslinux_archive"
-        cp "$syslinux_extracted_dir/bios/core/isolinux.bin" "$tmp_dir/"
-    elif [ ! -f "$tmp_dir/isolinux.bin" ]; then
+    elif [ ! -f "$isolinux_dest_dir/isolinux.bin" ]; then
         echo "Downloading Syslinux..."
         wget -O "$syslinux_archive" https://mirrors.edge.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.tar.gz
         echo "Extracting Syslinux..."
         tar -xzf "$syslinux_archive"
-        cp "$syslinux_extracted_dir/bios/core/isolinux.bin" "$tmp_dir/"
     else
+
         echo "isolinux.bin already exists in the temporary directory."
+    fi
+
+    cp "$syslinux_extracted_dir/bios/core/isolinux.bin" "$isolinux_dest_dir/"
+}
+
+# Function to check if a specific command is installed, and install it if not
+check_and_install_command() {
+    local cmd=$1
+    local package=${2:-$1}  # If package name is not provided, use cmd name
+
+    if ! command -v $cmd &> /dev/null; then
+        echo "Command $cmd not found. Attempting to install $package..."
+        apt-get update && apt-get install -y $package
     fi
 }
 
-clean_up() {
-    echo "Cleaning up..."
 
-    sudo rm -r "$tmp_dir"
+# Variables
+ISO="./ubuntu-22.04.3-desktop-amd64.iso"
+MOUNT_POINT="/mnt/ubuntu-iso"
+EXTRACT_DIR="/tmp/ubuntu-iso"
+CUSTOM_DIR="/tmp/custom-ubuntu"
+NEW_ISO="custom-ubuntu-22.04-desktop-amd64.iso"
+OUTPUT_DIR="./custom"
+# Clean up
+echo "Cleaning up..."
+if mount | grep -q "on $MOUNT_POINT type"; then
+    umount $MOUNT_POINT
+fi
+rm -rf $MOUNT_POINT $EXTRACT_DIR $CUSTOM_DIR
 
-    sudo umount "$mnt_dir"
-    sudo rmdir "$mnt_dir"
+# Check for required commands
+check_and_install_command "mount"
+check_and_install_command "rsync"
+check_and_install_command "unsquashfs"
+check_and_install_command "mksquashfs"
+check_and_install_command "genisoimage"
 
-    local syslinux_archive="syslinux-6.03.tar.gz"
-    local syslinux_extracted_dir="syslinux-6.03"
-    sudo rm -f "$syslinux_archive"
-    sudo rm -rf "$syslinux_extracted_dir"
+# Ensure running as root
+if [ "$(id -u)" != "0" ]; then
+   echo "This script must be run as root" 1>&2
+   exit 1
+fi
 
-    echo "Cleanup complete."
-}
-
-ubuntu_iso="../ubuntu-22.04.3-desktop-amd64.iso"
-output_dir="./custom_iso"
-output_iso="$output_dir/custom_ubuntu.iso"
-
-preseed_file="../config/preseed.cfg"
-
-if [ ! -f "$ubuntu_iso" ]; then
-    echo "Error: Ubuntu ISO file not found at: $ubuntu_iso"
+# Check if ISO file exists
+if [ ! -f "$ISO" ]; then
+    echo "ISO file not found: $ISO" 1>&2
     exit 1
 fi
 
-if [ ! -f "$preseed_file" ]; then
-    echo "Error: preseed.cfg file not found at: $preseed_file"
-    exit 1
-fi
-
-if [ ! -d "$output_dir" ]; then
-    mkdir -p "$output_dir"
-    chmod 777 "$output_dir"
-    echo "Created output directory: $output_dir"
+# Step 1: Check if the ISO is already mounted
+echo "Checking if ISO is already mounted..."
+if mount | grep -q "on $MOUNT_POINT type"; then
+    echo "ISO already mounted. Skipping the mount step."
 else
-    echo "Output directory already exists: $output_dir"
+    echo "Mounting ISO..."
+    mkdir -p $MOUNT_POINT
+    chmod 777 $MOUNT_POINT
+    mount -o loop $ISO $MOUNT_POINT
 fi
 
-if [ -f "$output_iso" ]; then
-    echo "Custom ISO '$output_iso' already exists. Exiting script."
-    exit 0
-fi
+# Step 2: Copy the ISO contents to a working directory
+echo "Copying ISO contents..."
+mkdir -p $EXTRACT_DIR
+chmod 777 $EXTRACT_DIR
+rsync -av $MOUNT_POINT/ $EXTRACT_DIR
 
-mnt_dir="/mnt/original_iso"
-if [ ! -d "$mnt_dir" ]; then
-    sudo mkdir -p "$mnt_dir"
-    echo "Created mount directory: $mnt_dir"
-else
-    echo "Mount directory already exists: $mnt_dir"
-fi
+# Step 3: Extract the SquashFS filesystem
+echo "Extracting SquashFS filesystem..."
+mkdir -p $CUSTOM_DIR
+chmod 777 $CUSTOM_DIR
+unsquashfs -d $CUSTOM_DIR/squashfs-root $EXTRACT_DIR/casper/filesystem.squashfs
 
-sudo mount -o loop "$ubuntu_iso" "$mnt_dir"
+# Copy host's DNS settings
+cp /etc/resolv.conf $CUSTOM_DIR/squashfs-root/etc/
 
-tmp_dir=$(mktemp -d)
-echo "Creating temporary working directory in $tmp_dir"
+# Step 4: Chroot into the extracted filesystem
+echo "Entering chroot environment..."
+mount --bind /dev $CUSTOM_DIR/squashfs-root/dev
+mount --bind /proc $CUSTOM_DIR/squashfs-root/proc
+mount --bind /sys $CUSTOM_DIR/squashfs-root/sys
+chroot $CUSTOM_DIR/squashfs-root /bin/bash <<EOF
 
-echo "Extracting contents of the original ISO..."
-7z x "$ubuntu_iso" -o"$tmp_dir"
+# Generate and update locale
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
 
-cp "$preseed_file" "$tmp_dir/preseed.cfg"
+# Customization commands go here
+# For example, setting timezone and locale
+ln -fs /usr/share/zoneinfo/Europe/Paris /etc/localtime
+dpkg-reconfigure -f noninteractive tzdata
 
-install_genisoimage
+# Install additional packages or remove packages
+apt-get update
+apt-get install -y vim  # example package
+apt-get clean
+
+# Modify settings, add users, etc.
+
+EOF
+
+# Exit chroot
+echo "Exiting chroot..."
+
+# Unmount special filesystems
+umount $CUSTOM_DIR/squashfs-root/{sys,proc,dev}
+
+# Step 5: Repackage the modified filesystem
+echo "Repackaging the modified filesystem..."
+mksquashfs $CUSTOM_DIR/squashfs-root $EXTRACT_DIR/casper/filesystem.squashfs -noappend
 
 download_and_extract_isolinux
 
-echo "Creating custom ISO..."
-mkisofs -o "$output_iso" -b "isolinux.bin" -c "boot.cat" -no-emul-boot -input-charset utf-8 -boot-load-size 4 -boot-info-table -J -R -V "Custom Ubuntu" "$tmp_dir" > /dev/null 2>&1
+# Step 6: Create the new ISO
+echo "Creating new ISO..."
+cd $EXTRACT_DIR
+mkdir $OUTPUT_DIR
+genisoimage -r -V "Custom Ubuntu 22.04" -cache-inodes -J -l \
+            -b isolinux/isolinux.bin \
+            -c isolinux/boot.cat \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            -o "$OUTPUT_DIR/$NEW_ISO" .
 
-if [ $? -eq 0 ]; then
-    echo "Custom ISO '$output_iso' has been created in $output_dir."
-    clean_up
+# Ensure ISO creation was successful
+if [ -f "../$NEW_ISO" ]; then
+    echo "Custom ISO created: ../$NEW_ISO"
 else
     echo "Failed to create custom ISO."
-    clean_up
     exit 1
 fi
+
+# Clean up
+echo "Cleaning up..."
+if mount | grep -q "on $MOUNT_POINT type"; then
+    umount $MOUNT_POINT
+fi
+# Only remove the directories but not the newly created ISO
+#rm -rf $MOUNT_POINT $EXTRACT_DIR $CUSTOM_DIR

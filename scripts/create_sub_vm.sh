@@ -6,7 +6,7 @@ if [ $# -ne 1 ]; then
 fi
 
 vm_name="$1"
-custom_iso_file="./custom_ubuntu.iso"
+iso_file_path="custom_iso/custom_ubuntu.iso"
 
 file_exists() {
     if [ ! -f "$1" ]; then
@@ -15,7 +15,7 @@ file_exists() {
     fi
 }
 
-file_exists "$custom_iso_file"
+file_exists "$iso_file_path"
 
 if VBoxManage showvminfo "$vm_name" >/dev/null 2>&1; then
     echo "VM '$vm_name' already exists."
